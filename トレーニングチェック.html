@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="トレーニング">
+<title>トレーニングチェック</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1c1f24;--sub:#7a8290;--accent:#16a34a;--accent2:#dcfce7;--line:#e5e7eb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111317;--card:#1b1e24;--text:#f1f3f5;--sub:#9aa3b0;--accent:#22c55e;--accent2:#14351f;--line:#2a2e36}}
+:root[data-theme="dark"]{--bg:#111317;--card:#1b1e24;--text:#f1f3f5;--sub:#9aa3b0;--accent:#22c55e;--accent2:#14351f;--line:#2a2e36}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Hiragino Sans",sans-serif;min-height:100vh}
+main{max-width:480px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:20px;margin:4px 0 16px;text-align:center}
+.stats{display:flex;gap:10px;margin-bottom:16px}
+.stat{flex:1;background:var(--card);border-radius:16px;padding:12px;text-align:center}
+.stat b{display:block;font-size:28px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--sub)}
+#big{width:100%;border:0;border-radius:24px;padding:30px 10px;font-size:26px;font-weight:700;background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(22,163,74,.3)}
+#big:active{transform:scale(.98)}
+#big.done{background:var(--accent2);color:var(--accent);box-shadow:none}
+.cal{background:var(--card);border-radius:20px;padding:14px;margin-top:18px}
+.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.nav button{border:0;background:none;font-size:22px;color:var(--text);padding:6px 14px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
+.dow{font-size:11px;color:var(--sub)}
+.d{aspect-ratio:1;border-radius:50%;border:0;background:none;color:var(--text);font-size:15px}
+.d.on{background:var(--accent);color:#fff;font-weight:700}
+.d.today{outline:2px solid var(--accent)}
+.d.future{color:var(--sub);opacity:.4}
+.card{background:var(--card);border-radius:20px;padding:14px;margin-top:16px}
+.card h2{font-size:14px;margin:0 0 8px}
+.bar{height:12px;border-radius:6px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px;color:var(--sub)}
+.yen{font-size:22px;font-weight:700;color:var(--accent)}
+.sm{border:0;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;background:var(--accent2);color:var(--accent)}
+.sm[disabled]{opacity:.4}
+#share{width:100%;margin-top:14px;padding:14px;font-size:16px}
+.badges{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.bd{font-size:28px;filter:grayscale(1);opacity:.3}
+.bd.on{filter:none;opacity:1}
+.bd small{display:block;font-size:10px;color:var(--sub)}
+#msg{font-size:12px;color:var(--sub);text-align:center;margin-top:8px;white-space:pre-wrap;user-select:text}
+.hint{font-size:12px;color:var(--sub);text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+<h1>🏃 トレーニングチェック</h1>
+<div class="stats">
+<div class="stat"><b id="streak">0</b><span>連続日数</span></div>
+<div class="stat"><b id="month">0</b><span>今月の日数</span></div>
+<div class="stat"><b id="total">0</b><span>合計</span></div>
+</div>
+<button id="big">今日やった！</button>
+<button class="sm" id="share">📨 おうちの人に報告する</button>
+<div id="msg"></div>
+<div class="card">
+<h2>💰 ごほうび（10日連続ごとに250円）</h2>
+<div class="bar"><i id="bar"></i></div>
+<div class="row"><span id="next"></span><span>もらえる金額 <b class="yen" id="yen">0円</b></span></div>
+<div class="row"><span id="earned"></span><button class="sm" id="pay">もらった</button></div>
+</div>
+<div class="card"><h2>🏅 バッジ（連続日数）</h2><div class="badges" id="badges"></div></div>
+<div class="cal">
+<div class="nav"><button id="prev">‹</button><strong id="title"></strong><button id="next">›</button></div>
+<div class="grid" id="grid"></div>
+<div class="hint">日付をタップすると、あとから付けたり消したりできます</div>
+</div>
+</main>
+<script>
+const KEY="training-check-v1";
+let days={};
+try{days=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){days={}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(days))}catch(e){}}
+const pad=n=>String(n).padStart(2,"0");
+const fmt=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const todayKey=()=>fmt(new Date());
+let view=new Date();view.setDate(1);
+
+function streak(){
+  let d=new Date(),n=0;
+  if(!days[fmt(d)])d.setDate(d.getDate()-1);
+  while(days[fmt(d)]){n++;d.setDate(d.getDate()-1)}
+  return n;
+}
+function render(){
+  const t=todayKey(),y=view.getFullYear(),m=view.getMonth();
+  document.getElementById("title").textContent=y+"年"+(m+1)+"月";
+  const big=document.getElementById("big");
+  big.classList.toggle("done",!!days[t]);
+  big.textContent=days[t]?"✅ 今日はできた！":"今日やった！";
+  const g=document.getElementById("grid");g.innerHTML="";
+  "日月火水木金土".split("").forEach(w=>{const e=document.createElement("div");e.className="dow";e.textContent=w;g.appendChild(e)});
+  const first=new Date(y,m,1).getDay(),last=new Date(y,m+1,0).getDate();
+  for(let i=0;i<first;i++)g.appendChild(document.createElement("div"));
+  for(let i=1;i<=last;i++){
+    const k=y+"-"+pad(m+1)+"-"+pad(i);
+    const b=document.createElement("button");b.className="d";b.textContent=i;
+    if(days[k])b.classList.add("on");
+    if(k===t)b.classList.add("today");
+    if(k>t)b.classList.add("future");
+    else b.onclick=()=>{days[k]?delete days[k]:days[k]=1;save();render()};
+    g.appendChild(b);
+  }
+  const mk=y+"-"+pad(m+1);
+  document.getElementById("month").textContent=Object.keys(days).filter(k=>k.startsWith(mk)).length;
+  document.getElementById("total").textContent=Object.keys(days).length;
+  document.getElementById("streak").textContent=streak();
+  extras();
+}
+
+const PKEY="training-paid-v1";
+let paid=0;try{paid=Number(localStorage.getItem(PKEY))||0}catch(e){}
+function runs(){
+  const ks=Object.keys(days).sort();let r=[],c=0,prev=null;
+  for(const k of ks){
+    const d=new Date(k+"T00:00:00");
+    if(prev&&Math.round((d-prev)/864e5)===1)c++;else{if(c)r.push(c);c=1}
+    prev=d;
+  }
+  if(c)r.push(c);return r;
+}
+const BADGES=[[3,"🌱"],[7,"🔥"],[10,"🥉"],[20,"🥈"],[30,"🥇"],[50,"🏆"],[100,"👑"]];
+function extras(){
+  const r=runs(),best=r.length?Math.max(...r):0,st=streak();
+  const earned=r.reduce((a,n)=>a+Math.floor(n/10)*250,0);
+  const unpaid=Math.max(0,earned-paid);
+  const rem=st%10;
+  document.getElementById("bar").style.width=(st>0&&rem===0?100:rem*10)+"%";
+  document.getElementById("next").textContent=st>0&&rem===0?"🎉 10日達成！":"あと"+(10-rem)+"日で+250円";
+  document.getElementById("yen").textContent=unpaid+"円";
+  document.getElementById("earned").textContent="これまでの獲得 "+earned+"円 / 受取済み "+Math.min(paid,earned)+"円";
+  document.getElementById("pay").disabled=unpaid===0;
+  document.getElementById("badges").innerHTML=BADGES.map(([n,e])=>`<div class="bd ${best>=n?"on":""}">${e}<small>${n}日</small></div>`).join("");
+  return {st,earned,unpaid};
+}
+document.getElementById("pay").onclick=()=>{
+  const r=runs();paid=r.reduce((a,n)=>a+Math.floor(n/10)*250,0);
+  try{localStorage.setItem(PKEY,String(paid))}catch(e){}render();
+};
+document.getElementById("share").onclick=async()=>{
+  const {st,unpaid}=extras();
+  const mk=view.getFullYear()+"-"+pad(view.getMonth()+1);
+  const t=new Date();const tk=fmt(t);
+  const mcount=Object.keys(days).filter(k=>k.startsWith(tk.slice(0,7))).length;
+  const text=(days[tk]?"今日もトレーニングやったよ💪":"トレーニングの記録だよ")+"\n連続"+st+"日 / 今月"+mcount+"日 / ごほうび"+unpaid+"円";
+  const m=document.getElementById("msg");
+  try{await navigator.share({text});m.textContent="";return}catch(e){if(e&&e.name==="AbortError")return}
+  try{await navigator.clipboard.writeText(text);m.textContent="コピーしたよ！LINEなどに貼りつけて送ろう\n"+text;return}catch(e){}
+  m.textContent="これを送ろう👇\n"+text;
+};
+
+document.getElementById("big").onclick=()=>{const t=todayKey();days[t]?delete days[t]:days[t]=1;save();render()};
+document.getElementById("prev").onclick=()=>{view.setMonth(view.getMonth()-1);render()};
+document.getElementById("next").onclick=()=>{view.setMonth(view.getMonth()+1);render()};
+render();
+</script>
+</body>
+</html>
